@@ -10,6 +10,7 @@ import (
 
 	"github.com/enescakir/emoji"
 	"github.com/fogleman/gg"
+	"github.com/wcharczuk/go-chart"
 
 	"image"
 	"image/color/palette"
@@ -25,12 +26,12 @@ type Forest struct {
 	treeNumber int
 }
 
-func newForest(rows, columns int, percentage float32) *Forest {
+func newForest(rows, columns int, percentage float64) *Forest {
 	f := &Forest{
 		forest:  make([][]int, rows),
 		rows:    rows,
 		columns: columns,
-		treeNumber: int(float32(rows*columns) * percentage),
+		treeNumber: int(float64(rows*columns) * percentage),
 	}
 	for i := range f.forest {
 		f.forest[i] = make([]int, columns)
@@ -71,10 +72,10 @@ func (f *Forest) shootLightning(toVizualize bool) bool {
 	x := rand.Intn(f.rows)
 	y := rand.Intn(f.columns)
 	if f.forest[x][y] == 0 {
-		fmt.Printf("Piorun nie uderzył w drzewo! Nie ma pożaru %v\n", emoji.SmilingFaceWithSunglasses)
+		// fmt.Printf("Piorun nie uderzył w drzewo! Nie ma pożaru %v\n", emoji.SmilingFaceWithSunglasses)
 		return false
 	} else {
-		fmt.Printf("Uderzenie pioruna w drzewo (%v, %v)!! Zaczyna się pożar! %v\n", y, x, emoji.AstonishedFace)
+		// fmt.Printf("Uderzenie pioruna w drzewo (%v, %v)!! Zaczyna się pożar! %v\n", y, x, emoji.AstonishedFace)
 		f.forest[x][y] = 2
 		if toVizualize {
 			f.saveAsImage("forest_pics/forest_1.gif")
@@ -84,7 +85,6 @@ func (f *Forest) shootLightning(toVizualize bool) bool {
 	}
 }
 
-// z modyfikacją z wiatrem trzeba zmienić tylko neighbours
 func (f *Forest) spreadFire(x, y int, toVizualize bool) {
 	neighbors := [][2]int{{-1, 0}, {1, 0}, {0, -1}, {0, 1}, {-1, -1}, {-1, 1}, {1, -1}, {1, 1}}
 
@@ -104,9 +104,11 @@ func (f *Forest) spreadFire(x, y int, toVizualize bool) {
 	}
 }
 
-func (f *Forest) getStatistics() float32{
+func (f *Forest) getStatistics() float64{
 	var burned = f.countFire()
-	return float32(burned)/float32(f.treeNumber)
+	// fmt.Println(float64(burned)/float64(f.treeNumber), "ze środka")
+	// fmt.Println(float64(burned), float64(f.treeNumber), "ze środka")
+	return float64(burned)/float64(f.treeNumber)
 }
 
 func (f *Forest) countFire() int {
@@ -118,6 +120,7 @@ func (f *Forest) countFire() int {
 			}
 		}
 	}
+
 	return burned
 }
 
@@ -132,11 +135,11 @@ func (f *Forest) saveAsImage(filename string) error {
         for col := 0; col < f.columns; col++ {
             switch f.forest[row][col] {
             case 0:
-                dc.SetHexColor("#ffffff") // White color for empty space
+                dc.SetHexColor("#ffffff")
             case 1:
-                dc.SetHexColor("#1f8c1f") // Green color for trees
+                dc.SetHexColor("#1f8c1f")
             case 2:
-                dc.SetHexColor("#ff0000") // Red color for fire
+                dc.SetHexColor("#ff0000")
             }
             dc.DrawRectangle(float64(col*cellSize), float64(row*cellSize), float64(cellSize), float64(cellSize))
             dc.Fill()
@@ -190,7 +193,7 @@ func createGIFFromImages() error {
         outGif.Delay = append(outGif.Delay, 0)
     }
 
-    f, err := os.OpenFile("out.gif", os.O_WRONLY|os.O_CREATE, 0600)
+    f, err := os.OpenFile("visuals/out.gif", os.O_WRONLY|os.O_CREATE, 0600)
     if err != nil {
         return err
     }
@@ -203,7 +206,7 @@ func createGIFFromImages() error {
     return nil
 }
 
-func runSimulationWithVisualization(rows, columns int, percentage float32) {
+func runSimulationWithVisualization(rows, columns int, percentage float64) {
 	f := newForest(rows, columns, percentage)
 	err := f.saveAsImage("forest_pics/forest_0.gif")
 	if err != nil {
@@ -222,35 +225,107 @@ func runSimulationWithVisualization(rows, columns int, percentage float32) {
 
 }
 
+
+func findOptimum(m, n int, toPlot bool) (float64, float64) {
+	var percentages []float64
+	var maxRatio float64
+	var bestPercentage float64
+
+	var percentage float64 = 0.05
+	for percentage < 1 {
+		percentages = append(percentages, percentage)
+		percentage += 0.05
+	}
+
+	var ratioData []float64 // Przechowuje wartości stosunku zalesienia do spalenia dla każdego poziomu zalesienia
+	for _, p := range percentages {
+		sumBurned := float64(0)
+		for i := 0; i < 5000; i++ {
+			f := newForest(m, n, p)
+			f.shootLightning(false)
+			burnedPercentage := f.getStatistics()
+			sumBurned += burnedPercentage
+		}
+		avgBurned := sumBurned / 5000
+		ratio := p * (1 - avgBurned)
+		ratioData = append(ratioData, ratio)
+
+		if ratio > maxRatio {
+			maxRatio = ratio
+			bestPercentage = p
+		}
+	}
+
+	fmt.Printf("Najlepsze ratio (%v, %v): %.2f, dla poziomu zalesienia: %.2f\n", m, n, maxRatio, bestPercentage)
+
+	if toPlot {
+		plotData(percentages, ratioData)
+	}
+
+	return maxRatio, bestPercentage
+}
+
+func plotData(percentages []float64, ratios []float64) error {
+	series := chart.ContinuousSeries{
+		Name:    "Ratio vs Zalesienie",
+		XValues: percentages,
+		YValues: ratios,
+	}
+
+	graph := chart.Chart{
+		Series: []chart.Series{series},
+	}
+
+	graph.XAxis = chart.XAxis{
+		Name:      "Zalesienie",
+		NameStyle: chart.StyleShow(),
+		Style:     chart.StyleShow(),
+		Range:     &chart.ContinuousRange{Min: 0, Max: 1},
+		ValueFormatter: func(v interface{}) string {
+			if vf, isFloat := v.(float64); isFloat {
+				return fmt.Sprintf("%.2f", vf)
+			}
+			return ""
+		},
+	}
+
+	graph.YAxis = chart.YAxis{
+		Name:      "Ratio",
+		NameStyle: chart.StyleShow(),
+		Style:     chart.StyleShow(),
+		Range:     &chart.ContinuousRange{Min: 0, Max: 0.5},
+	}
+
+	graph.Elements = []chart.Renderable{
+		chart.Legend(&graph),
+	}
+
+	file, err := os.Create("visuals/plot.png")
+	if err != nil {
+		fmt.Println(err, "1")
+		return err
+	}
+	defer file.Close()
+
+	err = graph.Render(chart.PNG, file)
+	if err != nil {
+		fmt.Println(err, "2")
+		return err
+	}
+	return nil
+}
+
 func main() {
 	var rows int = 40
 	var columns int = 40
-	var percentage float32 = 0.5
-	// var toVizualize bool = true
+	var percentage float64 = 0.5
 	runSimulationWithVisualization(rows, columns, percentage)
-
-
-	// f := newForest(rows, columns, percentage)
-	// fmt.Printf("Las o wymiarach %v na %v przed uderzeniem pioruna:\n", rows, columns)
-	// f.displayForest()
-
-	// fmt.Println("\nWywołujemy uderzenie pioruna...")
-	// isBurned := f.shootLightning(toVizualize)
-	
-	// f.displayForest()
-	// var stats float32 = f.getStatistics()
-	// fmt.Printf("Spalono %.2f%% drzew\n", stats*100)
-
+	// findOptimum(20, 20, true)
+	// findOptimum(16, 25, false)
+	// findOptimum(10, 40, false)
+	// findOptimum(8, 50, false)
+	// findOptimum(5, 80, false)
+	// findOptimum(4, 100, false)
+	// findOptimum(2, 200, false)
 
 }
-
-// 1. Dopytać się o punkty za wizualizację
-
-// Test do znalezienia optymalnego poziomu zalesienia:
-// 1. dla każdego percentage od 5% do 95% z krokiem co 5 punktów procentowych wykonać po 1000 prób.
-// 2. Dla każdego percentage obliczyć średni poziom spalenia lasu
-// 3. Dla każdego percentage obliczyć stosunek: (zalesienie)/(średni poziom spalenia lasu)
-// 3. Znaleźć największy (najlepszy) stosunek
-
-// Test można przeprowadzić na lasach o różnych wymiarach, ale o tej samej powierzchni, np.
-// powierzchnia 400: 20x20, 16x25, 10x40, 8x50, 5x80, 4x100, 2x200
