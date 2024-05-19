@@ -106,8 +106,6 @@ func (f *Forest) spreadFire(x, y int, toVizualize bool) {
 
 func (f *Forest) getStatistics() float64{
 	var burned = f.countFire()
-	// fmt.Println(float64(burned)/float64(f.treeNumber), "ze środka")
-	// fmt.Println(float64(burned), float64(f.treeNumber), "ze środka")
 	return float64(burned)/float64(f.treeNumber)
 }
 
@@ -208,6 +206,7 @@ func createGIFFromImages() error {
 
 func runSimulationWithVisualization(rows, columns int, percentage float64) {
 	f := newForest(rows, columns, percentage)
+	f.displayForest()
 	err := f.saveAsImage("forest_pics/forest_0.gif")
 	if err != nil {
 		fmt.Println("Błąd podczas zapisywania obrazu:", err)
@@ -222,6 +221,9 @@ func runSimulationWithVisualization(rows, columns int, percentage float64) {
 	if err1 != nil {
 		println("Błąd tworzenia GIF:", err1)
 	}
+	fmt.Println()
+	f.displayForest()
+	fmt.Println(f.getStatistics())
 
 }
 
@@ -237,7 +239,7 @@ func findOptimum(m, n int, toPlot bool) (float64, float64) {
 		percentage += 0.05
 	}
 
-	var ratioData []float64 // Przechowuje wartości stosunku zalesienia do spalenia dla każdego poziomu zalesienia
+	var ratioData []float64
 	for _, p := range percentages {
 		sumBurned := float64(0)
 		for i := 0; i < 5000; i++ {
@@ -320,7 +322,7 @@ func main() {
 	var columns int = 40
 	var percentage float64 = 0.5
 	runSimulationWithVisualization(rows, columns, percentage)
-	// findOptimum(20, 20, true)
+	findOptimum(20, 20, true)
 	// findOptimum(16, 25, false)
 	// findOptimum(10, 40, false)
 	// findOptimum(8, 50, false)
